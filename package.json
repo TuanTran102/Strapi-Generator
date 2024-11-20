@@ -1,0 +1,17 @@
+{
+  "name": "strapi-generator",
+  "version": "1.0.0",
+  "description": "Generate Strapi modules from DB schema.",
+  "main": "src/generate.js",
+  "bin": {
+    "strapi-gen": "./bin/index.js"
+  },
+  "scripts": {
+    "test": "echo \"No tests yet!\""
+  },
+  "dependencies": {
+    "mysql2": "^3.5.0",
+    "fs-extra": "^11.1.1",
+    "dotenv": "^16.1.4"
+  }
+}
