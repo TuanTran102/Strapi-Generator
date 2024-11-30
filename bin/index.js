@@ -2,6 +2,7 @@
 
 const StrapiGenerator  = require('../src/generate');
 const generator = new StrapiGenerator();
+console.log('Starting generate...');
 generator.generateModules()
   .then(() => {
     console.log('Generation complete!');

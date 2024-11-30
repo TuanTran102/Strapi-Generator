@@ -1,6 +1,8 @@
 const path = require('path');
 const fs = require('fs-extra');
 const mysql = require('mysql2/promise');
+const dotenv = require('dotenv');
+dotenv.config();
 
 /**
  * StrapiGenerator
@@ -20,11 +22,23 @@ class StrapiGenerator {
       host: process.env.SOURCE_DB_HOST || 'localhost',
       user: process.env.SOURCE_DB_USER || 'root',
       password: process.env.SOURCE_DB_PASSWORD || '',
-      database: process.env.SOURCE_DB_NAME || 'restaurant',
+      database: process.env.SOURCE_DB_NAME || 'strapi',
       port: process.env.SOURCE_DB_PORT || 3306,
     };
-    this.tablePrefix = process.env.SOURCE_DB_TABLE_PREFIX || 'tbl';
+    this.tablePrefix = process.env.SOURCE_DB_TABLE_PREFIX || '';
     this.excludedFields = ['id', 'created_at', 'updated_at', 'published_at', 'locale', 'created_by_id', 'updated_by_id', 'document_id'];
+    this.typeMapping = {
+      int: 'integer',
+      bigint: 'biginteger',
+      varchar: 'string',
+      text: 'text',
+      datetime: 'datetime',
+      date: 'date',
+      tinyint: 'boolean',
+      decimal: 'float',
+      double: 'float',
+      float: 'float',
+    };
   }
 
   /**
@@ -44,19 +58,7 @@ class StrapiGenerator {
    * @returns {string}
    */
   mapDataTypeToStrapi(dataType) {
-    const typeMapping = {
-      int: 'integer',
-      bigint: 'biginteger',
-      varchar: 'string',
-      text: 'text',
-      datetime: 'datetime',
-      date: 'date',
-      tinyint: 'boolean',
-      decimal: 'float',
-      double: 'float',
-      float: 'float',
-    };
-    return typeMapping[dataType] || 'string';
+    return this.typeMapping[dataType] || 'string';
   }
 
   /**
@@ -88,18 +90,38 @@ class StrapiGenerator {
   }
 
   /**
+   * Creates a file from template
+   * 
+   * @param {string} basePath 
+   * @param {string} fileName 
+   * @param {string} content 
+   */
+  async createFile(basePath, fileName, content) {
+    await fs.ensureDir(basePath);
+    await fs.writeFile(path.join(basePath, fileName), content);
+  }
+
+  /**
+   * Get module base information
+   * 
+   * @param {string} tableName 
+   * @returns {object}
+   */
+  getModuleInfo(tableName) {
+    const singularName = this.toKebabCase(tableName.replace(this.tablePrefix, ''));
+    const basePath = path.join(process.cwd(), 'src/api', singularName);
+    return { singularName, basePath };
+  }
+
+  /**
    * Creates a content type
    *
    * @param {string} tableName
    * @param {object[]} attributes
    */
   async createContentType(tableName, attributes) {
-    const singularName = this.toKebabCase(tableName);
-    const basePath = path.join(process.cwd(), 'src/api', singularName);
+    const { singularName, basePath } = this.getModuleInfo(tableName);
     const contentTypePath = path.join(basePath, 'content-types', singularName);
-
-    await fs.ensureDir(contentTypePath);
-
     const filteredAttributes = attributes.filter(attr => !this.excludedFields.includes(attr.name));
 
     const contentType = {
@@ -122,100 +144,33 @@ class StrapiGenerator {
       }, {}),
     };
 
-    await fs.writeJson(
-      path.join(contentTypePath, 'schema.json'),
-      contentType,
-      { spaces: 2 }
-    );
-
+    await fs.ensureDir(contentTypePath);
+    await fs.writeJson(path.join(contentTypePath, 'schema.json'), contentType, { spaces: 2 });
     console.log(`Content type for "${tableName}" created.`);
   }
 
   /**
-   * Creates a controller
+   * Creates a module file (controller, service, or route)
    *
    * @param {string} tableName
+   * @param {string} type
    */
-  async createController(tableName) {
-    const singularName = this.toKebabCase(tableName);
-    const basePath = path.join(process.cwd(), 'src/api', singularName);
-    const controllerPath = path.join(basePath, 'controllers');
-
-    await fs.ensureDir(controllerPath);
-
-    const controllerData = `
+  async createModuleFile(tableName, type) {
+    const { singularName, basePath } = this.getModuleInfo(tableName);
+    const folderPath = path.join(basePath, `${type}s`);
+    
+    const fileContent = `
       /**
-       * ${singularName} controller
+       * ${singularName} ${type}
        */
 
       import { factories } from '@strapi/strapi'
 
-      export default factories.createCoreController('api::${singularName}.${singularName}');
+      export default factories.createCore${type.charAt(0).toUpperCase() + type.slice(1)}('api::${singularName}.${singularName}');
     `;
-    await fs.writeFile(
-      path.join(controllerPath, `${singularName}.ts`),
-      controllerData
-    );
 
-    console.log(`Controller for "${tableName}" created.`);
-  }
-
-  /**
-   * Creates a service
-   *
-   * @param {string} tableName
-   */
-  async createService(tableName) {
-    const singularName = this.toKebabCase(tableName);
-    const basePath = path.join(process.cwd(), 'src/api', singularName);
-    const servicePath = path.join(basePath, 'services');
-
-    await fs.ensureDir(servicePath);
-
-    const serviceData = `
-      /**
-       * ${singularName} service
-       */
-
-      import { factories } from '@strapi/strapi'
-
-      export default factories.createCoreService('api::${singularName}.${singularName}');
-    `;
-    await fs.writeFile(
-      path.join(servicePath, `${singularName}.ts`),
-      serviceData
-    );
-
-    console.log(`Service for "${tableName}" created.`);
-  }
-
-  /**
-   * Creates a route
-   *
-   * @param {string} tableName
-   */
-  async createRoute(tableName) {
-    const singularName = this.toKebabCase(tableName);
-    const basePath = path.join(process.cwd(), 'src/api', singularName);
-    const routePath = path.join(basePath, 'routes');
-
-    await fs.ensureDir(routePath);
-
-    const routeData = `
-      /**
-       * ${singularName} router
-       */
-
-      import { factories } from '@strapi/strapi'
-
-      export default factories.createCoreRouter('api::${singularName}.${singularName}');
-    `;
-    await fs.writeFile(
-      path.join(routePath, `${singularName}.ts`),
-      routeData
-    );
-
-    console.log(`Route for "${tableName}" created.`);
+    await this.createFile(folderPath, `${singularName}.ts`, fileContent);
+    console.log(`${type} for "${tableName}" created.`);
   }
 
   /**
@@ -226,9 +181,9 @@ class StrapiGenerator {
 
     for (const [tableName, attributes] of Object.entries(schema)) {
       await this.createContentType(tableName, attributes);
-      await this.createController(tableName);
-      await this.createService(tableName);
-      await this.createRoute(tableName);
+      await this.createModuleFile(tableName, 'controller');
+      await this.createModuleFile(tableName, 'service');
+      await this.createModuleFile(tableName, 'router');
     }
 
     console.log('Modules generated successfully.');
@@ -236,4 +191,3 @@ class StrapiGenerator {
 }
 
 module.exports = StrapiGenerator;
-
