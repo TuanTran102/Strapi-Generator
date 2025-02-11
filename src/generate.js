@@ -158,7 +158,11 @@ class StrapiGenerator {
   async createModuleFile(tableName, type) {
     const { singularName, basePath } = this.getModuleInfo(tableName);
     const folderPath = path.join(basePath, `${type}s`);
-    
+    switch (type) {
+      case 'route':
+        type = 'router';
+        break;
+    }
     const fileContent = `
       /**
        * ${singularName} ${type}
@@ -183,7 +187,7 @@ class StrapiGenerator {
       await this.createContentType(tableName, attributes);
       await this.createModuleFile(tableName, 'controller');
       await this.createModuleFile(tableName, 'service');
-      await this.createModuleFile(tableName, 'router');
+      await this.createModuleFile(tableName, 'route');
     }
 
     console.log('Modules generated successfully.');
